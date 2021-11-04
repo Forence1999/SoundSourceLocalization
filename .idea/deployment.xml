@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="PublishConfigData" autoUpload="Always" serverName="swang@127.0.0.1:6000 password (4)" createEmptyFolders="true" remoteFilesAllowedToDisappearOnAutoupload="false">
+    <serverData>
+      <paths name="swang@127.0.0.1:6000 password (4)">
+        <serverdata>
+          <mappings>
+            <mapping deploy="/SmartWalker/SSL" local="$PROJECT_DIR$" web="/" />
+          </mappings>
+          <excludedPaths>
+            <excludedPath local="true" path="$PROJECT_DIR$/Gsound" />
+            <excludedPath local="true" path="$PROJECT_DIR$/dataset" />
+            <excludedPath local="true" path="$PROJECT_DIR$/papers_xiaoyang" />
+            <excludedPath local="true" path="$PROJECT_DIR$/paper" />
+          </excludedPaths>
+        </serverdata>
+      </paths>
+    </serverData>
+    <option name="myAutoUpload" value="ALWAYS" />
+  </component>
+</project>
