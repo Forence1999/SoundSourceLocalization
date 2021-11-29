@@ -4,7 +4,6 @@
     <content url="file://$MODULE_DIR$">
       <excludeFolder url="file://$MODULE_DIR$/dataset" />
       <excludeFolder url="file://$MODULE_DIR$/Gsound" />
-      <excludeFolder url="file://$MODULE_DIR$/paper" />
       <excludeFolder url="file://$MODULE_DIR$/papers_xiaoyang" />
       <excludeFolder url="file://$MODULE_DIR$/RL_backup" />
     </content>
