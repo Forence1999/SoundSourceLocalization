@@ -6,22 +6,8 @@
 # @File: TSLeNet5.py
 # @Time: 2021/11/29/10:57
 # @Software: PyCharm
-import os
-import sys
-import time
-import random
-import warnings
-import numpy as np
-from copy import deepcopy
 import tensorflow as tf
-from tensorflow.keras.models import Model, Sequential
-from tensorflow.keras.layers import Input, Flatten, Dense, Activation, Permute, Dropout, Reshape, Permute, Lambda, \
-    Conv2D, MaxPooling2D, AveragePooling2D, SeparableConv2D, DepthwiseConv2D, BatchNormalization, SpatialDropout2D, \
-    MaxPool1D, Conv1D
-from tensorflow.keras.regularizers import l1_l2, l2
-from tensorflow.keras.constraints import max_norm
-from tensorflow.keras.losses import CategoricalCrossentropy
-from tensorflow.keras import backend as K
+from tensorflow.keras.layers import Input, Flatten, Dense, MaxPool1D, Conv1D
 
 
 class TSLeNet5(tf.keras.Model):  # s model

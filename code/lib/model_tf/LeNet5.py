@@ -6,13 +6,6 @@
 # @File: LeNet5.py
 # @Time: 2021/11/29/10:58
 # @Software: PyCharm
-import os
-import sys
-import time
-import random
-import warnings
-import numpy as np
-from copy import deepcopy
 import tensorflow as tf
 from tensorflow.keras.layers import Input, Flatten, Dense, MaxPool1D, Conv1D
 

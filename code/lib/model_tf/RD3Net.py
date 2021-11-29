@@ -1,14 +1,12 @@
+import os
+import random
+import numpy as np
 import tensorflow as tf
 import tensorflow.keras as keras
 from tensorflow.keras.models import Model, Sequential
 from tensorflow.keras.layers import BatchNormalization, ReLU, Conv2D, AvgPool2D, Dense, Input, Flatten, Activation, \
     Dropout
-import random
-import numpy as np
-import os
-import sys
 import tensorflow.keras.backend as K
-import platform
 from tensorflow.keras.constraints import max_norm
 
 os.environ['CUDA_VISIBLE_DEVICES'] = '2'

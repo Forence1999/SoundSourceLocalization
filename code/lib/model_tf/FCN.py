@@ -6,13 +6,6 @@
 # @File: FCN.py
 # @Time: 2021/11/29/11:02
 # @Software: PyCharm
-import os
-import sys
-import time
-import random
-import warnings
-import numpy as np
-from copy import deepcopy
 import tensorflow as tf
 from tensorflow.keras.models import Model, Sequential
 from tensorflow.keras.layers import Input, Flatten, Dense, Activation, Dropout, AveragePooling2D, BatchNormalization

@@ -6,24 +6,11 @@
 # @File: DeepCNN.py
 # @Time: 2021/11/29/11:00
 # @Software: PyCharm
-import os
-import sys
-import time
-import random
-import warnings
-import numpy as np
-from copy import deepcopy
 import tensorflow as tf
 from tensorflow.keras.models import Model, Sequential
-from tensorflow.keras.layers import Input, Flatten, Dense, Activation, Permute, Dropout, Reshape, Permute, Lambda, \
-    Conv2D, MaxPooling2D, AveragePooling2D, SeparableConv2D, DepthwiseConv2D, BatchNormalization, SpatialDropout2D, \
-    MaxPool1D, Conv1D
-from tensorflow.keras.regularizers import l1_l2, l2
+from tensorflow.keras.layers import Input, Flatten, Dense, Activation, Dropout, Conv2D, MaxPooling2D, \
+    BatchNormalization,
 from tensorflow.keras.constraints import max_norm
-from tensorflow.keras.losses import CategoricalCrossentropy
-from tensorflow.keras import backend as K
-from model_tf.RD3Net import *
-from model_tf.ResCNN_4_STFT_DOA import *
 
 
 def DeepConvNet(num_classes, Chans=64, SamplePoints=256, dropoutRate=0.5):
