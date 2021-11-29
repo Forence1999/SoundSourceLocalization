@@ -9,7 +9,7 @@
 import tensorflow as tf
 from tensorflow.keras.models import Model, Sequential
 from tensorflow.keras.layers import Input, Flatten, Dense, Activation, Dropout, Conv2D, MaxPooling2D, \
-    BatchNormalization,
+    BatchNormalization
 from tensorflow.keras.constraints import max_norm
 
 
