@@ -335,7 +335,7 @@ class Encoder(keras.Model):
         return output
 
 
-def RD3Net(nb_classes, Chans=64, SamplePoints=128, dropoutRate=None, norm_rate=0.25, classifier_units=128,
+def RD3Net(num_classes, Chans=64, SamplePoints=128, dropoutRate=None, norm_rate=0.25, classifier_units=128,
            num_d3block=2, growth_rate=4, kernel_size=(3, 3), num_d2block=2, dilated=True, norm=True, activation=True,
            d2_depth=2, down_scale=(2, 2), eps=EPS):
     """
@@ -357,7 +357,7 @@ def RD3Net(nb_classes, Chans=64, SamplePoints=128, dropoutRate=None, norm_rate=0
     bn = BatchNormalization(axis=1, epsilon=eps, )(encoder)
     relu = ReLU()(bn)
     flatten = Flatten()(relu)
-    classifier = Dense(nb_classes, activation='relu', kernel_constraint=max_norm(0.25))(flatten)
+    classifier = Dense(num_classes, activation='relu', kernel_constraint=max_norm(0.25))(flatten)
     # dense = Dense(nb_classes, name='dense', kernel_constraint=max_norm(0.25))(flatten)
     softmax = Activation('softmax', name='softmax')(classifier)
     

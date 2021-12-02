@@ -1,12 +1,12 @@
 import tensorflow as tf
-from model_tf.FCN import *
-from model_tf.EEGNet import *
-from model_tf.ShallowCNN import *
-from model_tf.DeepCNN import *
-from model_tf.LeNet5 import *
-from model_tf.TSLeNet5 import *
-from model_tf.RD3Net import *
-from model_tf.ResCNN_4_STFT_DOA import *
+from .model_tf.FCN import *
+from .model_tf.EEGNet import *
+from .model_tf.ShallowCNN import *
+from .model_tf.DeepCNN import *
+from .model_tf.LeNet5 import *
+from .model_tf.TSLeNet5 import *
+from .model_tf.RD3Net import *
+from .model_tf.ResCNN_4_STFT_DOA import *
 
 # # define the classes of DTW and soft-DTW-Probabilistic
 # class DTW(BaseClassicalModel):

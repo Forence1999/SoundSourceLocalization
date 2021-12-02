@@ -20,9 +20,11 @@ def standard_normalize_wise(data, normalization=None):
     data = np.array(data)
     if normalization is None:
         return data
-    assert normalization in ['sample-wise', 'channel-wise', 'samplepoint-wise']
+    assert normalization in ['whole', 'sample-wise', 'channel-wise', 'samplepoint-wise']
     for i in range(len(data)):
-        if normalization == 'sample-wise':
+        if normalization == 'whole':
+            data = standard_normalize(data)
+        elif normalization == 'sample-wise':
             data[i, :, :] = standard_normalize(data[i, :, :])
         elif normalization == 'channel-wise':
             data[i, :, :] = [standard_normalize(data[i, j, :]) for j in range(data.shape[-2])]
@@ -432,6 +434,50 @@ def plot_hist(data, title=None, img_path=None, bins=100, show=True):
         plt.show()
     else:
         plt.close()
+
+def plot_multi_bars(data, color=None, title=None, x_labels=None, y_label=None, y_lim=None, tick_step=1.,
+                      group_gap=0.2,
+                      bar_gap=0., plt_show=True, value_show=True, dpi=300, value_fontsize=5, value_interval=0.01,
+                      value_format='%.2f', save_path=None):
+    '''
+    x_labels: x轴坐标标签序列
+    data: 二维列表，每一行为同一颜色的各个bar值，每一列为同一个横坐标的各个bar值
+    tick_step: 默认x轴刻度步长为1，通过tick_step可调整x轴刻度步长。
+    group_gap: 组与组之间的间隙，最好为正值，否则组与组之间重叠
+    bar_gap ：每组中柱子间的空隙，默认为0，每组柱子紧挨，正值每组柱子之间有间隙，负值每组柱子之间重叠
+    '''
+    data = np.asarray(data)
+    bar_per_group_num = len(data[0])
+    if color is not None:
+        assert len(color) >= bar_per_group_num
+    x_ticks = np.arange(bar_per_group_num) * tick_step
+    group_num = len(data)
+    group_width = tick_step - group_gap
+    bar_span = group_width / group_num  # 组内每个bar的宽度
+    bar_width = bar_span - bar_gap
+    baseline_x = x_ticks - (group_width - bar_span) / 2  # baseline_x为每组柱子第一个柱子的基准x轴位置
+    plt.figure(dpi=dpi)
+    for index, y in enumerate(data):
+        x = baseline_x + index * bar_span
+        if color is not None:
+            plt.bar(x, y, bar_width, color=color[index])
+        else:
+            plt.bar(x, y, bar_width)
+        if value_show:
+            for x0, y0 in zip(x, y):
+                plt.text(x0, y0 + value_interval, value_format % y0, ha='center', va='bottom', fontsize=value_fontsize)
+    if title is not None:
+        plt.title(title)
+    if x_labels is not None:
+        plt.xticks(x_ticks, x_labels)
+    if y_label is not None:
+        plt.ylabel(y_label)
+    if y_lim is not None:
+        plt.ylim(y_lim)
+    if save_path is not None:
+        plt.savefig(save_path)
+    if plt_show:
+        plt.show()
 
 
 def img_splice(img_paths, save_path, sgl_img_size):

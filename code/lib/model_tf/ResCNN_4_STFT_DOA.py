@@ -28,7 +28,7 @@ from tensorflow.keras import backend as K
 
 class ResCNN_4_STFT_DOA(tf.keras.Model):  # channel-first
     
-    def __init__(self, num_classes=8, name=None, **kwargs):
+    def __init__(self, num_classes, num_res_block, name=None, **kwargs):
         if name is None:
             name = self.__class__.__name__
         super(ResCNN_4_STFT_DOA, self).__init__(name=name, **kwargs)
@@ -36,97 +36,63 @@ class ResCNN_4_STFT_DOA(tf.keras.Model):  # channel-first
         # the input shape should be: (Channel=8, Time=7, Freq=337)
         
         # self.model_input = Input(shape=(8, 7, 337))
-        
+        self.num_res_block = num_res_block
         self.conv_1 = Sequential([
             Conv2D(filters=32, kernel_size=(1, 7), strides=(1, 3), padding='valid', ),  # (32, 7, 110)
             BatchNormalization(axis=1), Activation('relu'),
             Conv2D(filters=128, kernel_size=(1, 5), strides=(1, 2), padding='valid', ),  # (32, 7, 52)
             BatchNormalization(axis=1), Activation('relu')]
         )
+        self.res_block_ls = []
+        for _ in range(self.num_res_block):
+            res_conv = Sequential([
+                Conv2D(128, kernel_size=(1, 1), strides=(1, 1), padding='same'),
+                BatchNormalization(axis=1), Activation('relu'),
+                Conv2D(128, kernel_size=(3, 3), strides=(1, 1), padding='same'),
+                BatchNormalization(axis=1), Activation('relu'),
+                Conv2D(128, kernel_size=(1, 1), strides=(1, 1), padding='same'),
+                BatchNormalization(axis=1)])
+            self.res_block_ls.append(res_conv)
+        if self.num_res_block > 0:
+            self.relu = Activation('relu')
         
-        self.resconv_1 = Sequential([
-            Conv2D(128, kernel_size=(1, 1), strides=(1, 1), padding='same'),
-            BatchNormalization(axis=1), Activation('relu'),
-            Conv2D(128, kernel_size=(3, 3), strides=(1, 1), padding='same'),
-            BatchNormalization(axis=1), Activation('relu'),
-            Conv2D(128, kernel_size=(1, 1), strides=(1, 1), padding='same'),
-            BatchNormalization(axis=1)]
-        )
-        self.resconv_2 = Sequential([
-            Conv2D(128, kernel_size=(1, 1), strides=(1, 1), padding='same'),
-            BatchNormalization(axis=1), Activation('relu'),
-            Conv2D(128, kernel_size=(3, 3), strides=(1, 1), padding='same'),
-            BatchNormalization(axis=1), Activation('relu'),
-            Conv2D(128, kernel_size=(1, 1), strides=(1, 1), padding='same'),
-            BatchNormalization(axis=1)]
-        )
-        self.resconv_3 = Sequential([
-            Conv2D(128, kernel_size=(1, 1), strides=(1, 1), padding='same'),
-            BatchNormalization(axis=1), Activation('relu'),
-            Conv2D(128, kernel_size=(3, 3), strides=(1, 1), padding='same'),
-            BatchNormalization(axis=1), Activation('relu'),
-            Conv2D(128, kernel_size=(1, 1), strides=(1, 1), padding='same'),
-            BatchNormalization(axis=1)]
-        )
-        self.resconv_4 = Sequential([
-            Conv2D(128, kernel_size=(1, 1), strides=(1, 1), padding='same'),
-            BatchNormalization(axis=1), Activation('relu'),
-            Conv2D(128, kernel_size=(3, 3), strides=(1, 1), padding='same'),
-            BatchNormalization(axis=1), Activation('relu'),
-            Conv2D(128, kernel_size=(1, 1), strides=(1, 1), padding='same'),
-            BatchNormalization(axis=1)]
-        )
-        self.resconv_5 = Sequential([
-            Conv2D(128, kernel_size=(1, 1), strides=(1, 1), padding='same'),
-            BatchNormalization(axis=1), Activation('relu'),
-            Conv2D(128, kernel_size=(3, 3), strides=(1, 1), padding='same'),
-            BatchNormalization(axis=1), Activation('relu'),
-            Conv2D(128, kernel_size=(1, 1), strides=(1, 1), padding='same'),
-            BatchNormalization(axis=1)]
-        )
+        self.conv_2 = Sequential([
+            Conv2D(num_classes + 4, kernel_size=(1, 1), strides=(1, 1), padding='valid'),
+            BatchNormalization(axis=1), Activation('relu')])
         
-        self.conv_6 = Sequential([
-            Conv2D(12, kernel_size=(1, 1), strides=(1, 1), padding='valid'),
-            BatchNormalization(axis=1), Activation('relu')]
-        )
+        self.conv_3 = Sequential([
+            Conv2D(64, kernel_size=(1, 1), strides=(1, 1), padding='valid'),
+            BatchNormalization(axis=1), Activation('relu')])
         
-        self.conv_7 = Sequential([
-            Conv2D(128, kernel_size=(1, 1), strides=(1, 1), padding='valid'),
-            BatchNormalization(axis=1), Activation('relu')]
-        )
-        
-        self.conv_8 = Sequential([
+        self.conv_4 = Sequential([
             Conv2D(1, kernel_size=(7, 5), strides=(1, 1), padding='valid'),
-            BatchNormalization(axis=1), Reshape((-1,) ), Activation('softmax')]
-        )
-        
-        self.relu = Activation('relu')
+            BatchNormalization(axis=1), Reshape((-1,)), Activation('softmax')])
         # self.flatten = Flatten(name='flatten')
     
-    def call(self, inputs, training=None, mask=None):
+    def call(self, x, training=None, mask=None):
         # a.shape: [B, 8, 7, 337]
         # inputs = self.model_input(inputs)
-        a = self.conv_1(inputs)  # [B, 128, 7, 54]
-        a_azi = self.relu(a + self.resconv_1(a))  # [B, 128, 7, 54]
-        a_azi = self.relu(a_azi + self.resconv_2(a_azi))  # [B, 128, 7, 54]
-        a_azi = self.relu(a_azi + self.resconv_3(a_azi))  # [B, 128, 7, 54]
-        a_azi = self.relu(a_azi + self.resconv_4(a_azi))  # [B, 128, 7, 54]
-        a_azi = self.relu(a_azi + self.resconv_5(a_azi))  # [B, 128, 7, 54]
-        a_azi0 = self.conv_6(a_azi)  # [B, 360, 7, 54]
-        a_azi = K.permute_dimensions(a_azi0, (0, 3, 2, 1))  # [B, 54, 7, 360]
-        a_azi = self.conv_7(a_azi)  # [B, 500, 7, 360]
-        a_azi = self.conv_8(a_azi)  # [B, 1, 1, 360]
-        # a_azi = a_azi.view(a_azi.size(0), -1)  # [B, 360]
-        # a_azi = self.flatten(a_azi)
-        # a_azi = tf.squeeze(a_azi, axis=(1, 2), )
-        return a_azi
+        x = self.conv_1(x)  # [B, 128, 7, 54]
+        for res_block in self.res_block_ls:
+            x = self.relu(x + res_block(x))  # [B, 128, 7, 54]
+        x0 = self.conv_2(x)  # [B, 360, 7, 54]
+        x = K.permute_dimensions(x0, (0, 3, 2, 1))  # [B, 54, 7, 360]
+        x = self.conv_3(x)  # [B, 500, 7, 360]
+        x = self.conv_4(x)  # [B, 1, 1, 360]
+        # x = self.flatten(x)
+        return x
 
 
 if __name__ == '__main__':
+    os.environ['CUDA_VISIBLE_DEVICES'] = '3'
+    
     K.set_image_data_format('channels_first')
-    model = ResCNN_4_STFT_DOA(num_classes=8)
-    model.build(input_shape=(None, 8, 7, 337))
-    model.summary()
-    rand_input = np.random.random((3, 8, 7, 337))
-    y = model(rand_input)
+    for i in range(2, 3):
+        print('\n', 'Number of ResConv Blocks:', i, '\n', )
+        model = ResCNN_4_STFT_DOA(num_classes=8, num_res_block=i)
+        model.build(input_shape=(None, 8, 7, 508))
+        model.summary()
+        rand_input = np.random.random((3, 8, 7, 508))
+        y = model(rand_input)
+        print('y:', y.numpy())
     print('Hello World!')

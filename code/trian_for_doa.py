@@ -1,4 +1,5 @@
 import os
+import sys
 import pickle
 import six
 import random
@@ -142,22 +143,68 @@ class customized_modelcheckpoint(ModelCheckpoint):
                 raise e
 
 
-def build_model(model_name='EEGNet', num_classes=2, Chans=64, Samples=240, dropoutRate=0.25, kernLength=128):
+# class Gauss_sparse_categorical_crossentropy_Loss(Loss):
+#     def __init__(self, num_class=8, mean=0, sigma=1, label_smoothing=0):
+#         super(Gauss_sparse_categorical_crossentropy_Loss, self).__init__()
+#         self.num_class = num_class
+#         weight = np.roll(
+#             np.linspace(-self.num_class // 2, self.num_class // 2, endpoint=self.num_class % 2, num=self.num_class),
+#             -self.num_class // 2)
+#         weight = np.exp(- ((weight - mean) ** 2) / (2 * (sigma ** 2))) / (np.sqrt(2 * np.pi) * sigma)
+#         weight = -weight / weight.max()
+#         self.weight = weight - weight.min()
+#         self.label_smoothing = label_smoothing
+#
+#     def __call__(self, y_true, y_pred, sample_weight=None):
+#         print('Using self_customized loss function')
+#
+#         weight = np.roll(self.weight, y_true)
+#         onehot_labels = one_hot_encoder(y_true)
+#         if self.label_smoothing > 0:
+#             smooth_positives = 1.0 - self.label_smoothing
+#             smooth_negatives = self.label_smoothing / self.num_class
+#             onehot_labels = onehot_labels * smooth_positives + smooth_negatives
+#
+#         cross_entropy = -tf.reduce_mean(weight * onehot_labels * tf.log(tf.clip.by_value(y_pred, 1e-10, 1.0)))
+#
+#         return cross_entropy
+
+
+def get_model(model_config, dataset_config):
+    model_name = model_config.name
+    num_classes = dataset_config.num_class
+    dropoutRate = model_config.dropoutRate
+    
     if model_name == 'FCN':
-        return models_tf.FCN(num_classes=num_classes, Chans=Chans, SamplePoints=Samples, dropoutRate=dropoutRate)
+        Chans = dataset_config.num_channel
+        Samples = dataset_config.num_samplepoint
+        return models_tf.FCN(num_classes=model_config.num_class, Chans=Chans, SamplePoints=Samples,
+                             dropoutRate=dropoutRate)
     elif model_name == 'EEGNet':
+        kernLength = model_config.kernLength
+        Chans = dataset_config.num_channel
+        Samples = dataset_config.num_samplepoint
         print('kernLength: ', kernLength)
         return models_tf.EEGNet(num_classes=num_classes, Chans=Chans, SamplePoints=Samples, dropoutRate=dropoutRate,
                                 kernLength=kernLength, )
     elif model_name == 'DeepConvNet':
+        Chans = dataset_config.num_channel
+        Samples = dataset_config.num_samplepoint
         return models_tf.DeepConvNet(num_classes=num_classes, Chans=Chans, SamplePoints=Samples,
                                      dropoutRate=dropoutRate)
     elif model_name == 'ShallowConvNet':
+        Chans = dataset_config.num_channel
+        Samples = dataset_config.num_samplepoint
         return models_tf.ShallowConvNet(num_classes=num_classes, Chans=Chans, SamplePoints=Samples,
                                         dropoutRate=dropoutRate)
     elif model_name == 'RD3Net':
+        Chans = dataset_config.num_channel
+        Samples = dataset_config.num_samplepoint
         return models_tf.RD3Net(num_classes=num_classes, Chans=Chans, SamplePoints=Samples,
                                 dropoutRate=dropoutRate)
+    elif model_name == 'ResCNN_4_STFT_DOA':
+        num_res_block = model_config.num_res_block
+        return models_tf.ResCNN_4_STFT_DOA(num_classes=num_classes, num_res_block=num_res_block)
     else:
         raise Exception('No such model:{}'.format(model_name))
 
@@ -184,17 +231,19 @@ def train_model(train_dataset, val_dataset, test_dataset, model, model_path="./m
     
     x_train, y_train = utils.shuffle_data(train_dataset)
     # train_class_weight = calculate_class_weight(y_train)
-    x_val, y_val = val_dataset
+    
+    if val_dataset is not None:
+        x_val, y_val = val_dataset
     if test_dataset is not None:
         x_test, y_test = test_dataset
     num_train_batch = np.ceil(len(x_train) / batch_size)
     
     # Train Model
     print('-' * 20, 'Start to train model...', '-' * 20)
-    lr_schedule = tf.keras.experimental.CosineDecay(initial_learning_rate=0.005,
+    lr_schedule = tf.keras.experimental.CosineDecay(initial_learning_rate=0.001,
                                                     decay_steps=num_train_batch * epochs)
-    # lr_schedule = tf.keras.optimizers.schedules.ExponentialDecay(0.01, decay_steps=num_train_batch, decay_rate=0.99,
-    #                                                              staircase=True)
+    # lr_schedule = tf.keras.optimizers.schedules.ExponentialDecay(0.01, decay_steps=num_train_batch, \
+    #                                                              decay_rate=0.99, staircase=True)
     optimizer = tf.keras.optimizers.Adam(learning_rate=lr_schedule)
     model.compile(optimizer=optimizer, loss=loss, metrics=['acc', ])
     ### TensorBoard
@@ -209,7 +258,7 @@ def train_model(train_dataset, val_dataset, test_dataset, model, model_path="./m
     # test_callback = weighted_acc_callback(train_dataset, val_dataset, test_dataset, model=model)
     early_stopping = EarlyStopping(monitor='val_acc', mode='max', patience=patience, )
     # test_callback = TestCallback(val_dataset, test_dataset, early_stop)
-    model_ckpt = ModelCheckpoint(filepath=model_path, monitor='val_acc', mode='max', save_best_only=True)
+    model_ckpt = ModelCheckpoint(filepath=model_path, monitor='val_acc', mode='max', save_best_only=True, verbose=True)
     
     history = model.fit(x_train, y_train, epochs=epochs, batch_size=batch_size, shuffle=True,
                         validation_data=tuple(val_dataset), callbacks=[early_stopping, model_ckpt],
@@ -221,11 +270,6 @@ def train_model(train_dataset, val_dataset, test_dataset, model, model_path="./m
         'val_acc'   : np.array(history.history['val_acc'], dtype=np.float32),
         'val_loss'  : np.array(history.history['val_loss'], dtype=np.float32),
     }
-    # return {
-    #     'train_acc': np.array(test_callback.train_weighted_acc, dtype=np.float32),
-    #     'val_acc'  : np.array(test_callback.val_weighted_acc, dtype=np.float32),
-    #     'test_acc' : np.array(test_callback.test_weighted_acc, dtype=np.float32),
-    # }
 
 
 def eva_model(model, dataset):
@@ -274,12 +318,14 @@ def compute_target_gradient(x, model, target):
 
 class DATASET_CONFIG:
     def __init__(self, ds_dir=None, seg_len='1s', sample_rate=16000, ds_path=None, label_smooth_para=None,
-                 label_preprocess=None,
+                 label_preprocess=None, clip_ms_length=None, overlap_ratio=None,
                  ds_preprocess='normalized_denoise_nsnet2', gcc_phat=True, num_class=8, ):
         self.ds_dir = ds_dir
         self.seg_len = seg_len
         self.sample_rate = sample_rate
         self.ds_preprocess = ds_preprocess
+        self.clip_ms_length = clip_ms_length
+        self.overlap_ratio = overlap_ratio
         self.gcc_phat = gcc_phat
         self.num_sbj = None
         self.num_class = num_class
@@ -289,18 +335,20 @@ class DATASET_CONFIG:
         self.label_smooth_para = label_smooth_para
         self.label_preprocess = label_preprocess
         
-        with open(ds_path, "rb") as fo:
-            ds = pickle.load(fo)
-        x = ds['x']
-        self.num_sbj = len(x)
-        (_, self.num_feature_map, self.num_channel, self.num_samplepoint) = x[0].shape
-        del x, ds
+        # with open(ds_path, "rb") as fo:
+        #     ds = pickle.load(fo)
+        # x = ds['x']
+        # self.num_sbj = len(x)
+        # (_, self.num_feature_map, self.num_channel, self.num_samplepoint) = x[0].shape
+        # del x, ds
+        self.num_sbj = 14
+        (_, self.num_feature_map, self.num_channel, self.num_samplepoint) = (None, 8, 7, 508)
 
 
 class MODEL_CONFIG:
     def __init__(self, md_dir='./model', name='EEGNet', batch_size=32, epochs=1000, dropoutRate=0.25,
-                 earlystop_patience=50, num_filter=32, normalization=None, kernLength=None,
-                 loss=None):
+                 earlystop_patience=None, num_filter=32, normalization=None, kernLength=None,
+                 loss=None, num_res_block=None):
         self.name = name
         self.batch_size = batch_size
         self.epochs = epochs
@@ -308,37 +356,12 @@ class MODEL_CONFIG:
         self.earlystop_patience = earlystop_patience
         self.num_filter = num_filter
         self.normalization = normalization
+        self.num_res_block = num_res_block
         self.md_dir = md_dir
         self.ckpt_dir = os.path.join(self.md_dir, 'ckpt')
         self.kernLength = kernLength
         self.loss = loss
 
-
-# class Gauss_sparse_categorical_crossentropy_Loss(Loss):
-#     def __init__(self, num_class=8, mean=0, sigma=1, label_smoothing=0):
-#         super(Gauss_sparse_categorical_crossentropy_Loss, self).__init__()
-#         self.num_class = num_class
-#         weight = np.roll(
-#             np.linspace(-self.num_class // 2, self.num_class // 2, endpoint=self.num_class % 2, num=self.num_class),
-#             -self.num_class // 2)
-#         weight = np.exp(- ((weight - mean) ** 2) / (2 * (sigma ** 2))) / (np.sqrt(2 * np.pi) * sigma)
-#         weight = -weight / weight.max()
-#         self.weight = weight - weight.min()
-#         self.label_smoothing = label_smoothing
-#
-#     def __call__(self, y_true, y_pred, sample_weight=None):
-#         print('Using self_customized loss function')
-#
-#         weight = np.roll(self.weight, y_true)
-#         onehot_labels = one_hot_encoder(y_true)
-#         if self.label_smoothing > 0:
-#             smooth_positives = 1.0 - self.label_smoothing
-#             smooth_negatives = self.label_smoothing / self.num_class
-#             onehot_labels = onehot_labels * smooth_positives + smooth_negatives
-#
-#         cross_entropy = -tf.reduce_mean(weight * onehot_labels * tf.log(tf.clip.by_value(y_pred, 1e-10, 1.0)))
-#
-#         return cross_entropy
 
 def calculate_acc_and_acc3(x, y, model):
     y_pred = model.predict(x)
@@ -359,14 +382,41 @@ def calculate_acc_and_acc3(x, y, model):
     return acc, acc_3
 
 
+def get_model_dirname(model_dir, model_name, seg_len, kernLength, ds_name, label_preprocess, label_smooth_para, epochs,
+                      clip_ms_length, overlap_ratio, normalization, num_res_block):
+    model_name = 'ResCNN' if model_name == 'ResCNN_4_STFT_DOA' else model_name
+    num_res_block = '_' + str(num_res_block) if num_res_block is not None else ''
+    ds_name = '_' + ds_name
+    seg_len = '_' + str(seg_len) if (seg_len is not None) else ''
+    kernLength = '_kernLength_' + str(int(kernLength)) if (kernLength is not None) else ''
+    clip_ms_length = '_clip_ms_' + str(int(clip_ms_length)) if (clip_ms_length is not None) else ''
+    overlap_ratio = '_overlap_' + str(round(overlap_ratio, 2)) if (overlap_ratio is not None) else ''
+    normalization = '_norm_' + str(normalization)
+    label_preprocess = '_label_' + str(label_preprocess) + str(label_smooth_para)
+    return os.path.join(model_dir, model_name + num_res_block + seg_len + ds_name + '_epoch_' + str(epochs),
+                        kernLength + normalization + label_preprocess)
+
+
+def modify_x_4_ResCNN_4_STFT_DOA(x):
+    x = np.asarray(x)
+    x = x[:, :, :, 5:]
+    # x = np.transpose(x, (0, 2, 3, 1))
+    return x
+
+
 if __name__ == '__main__':
+    # num_res_block = int(sys.argv[1])
+    # temp_norm = str(sys.argv[2])
+    # normalization = temp_norm if temp_norm != 'None' else None
+    # print('num_res_block:', num_res_block, 'normalization:', normalization, )
     
     # setting keras
-    os.environ['CUDA_VISIBLE_DEVICES'] = '2'
+    os.environ['CUDA_VISIBLE_DEVICES'] = '3'
     gpus = tf.config.experimental.list_physical_devices(device_type='GPU')
     tf.config.experimental.set_visible_devices(gpus[0], 'GPU')
-    tf.config.experimental.VirtualDeviceConfiguration(memory_limit=1024 * 4)
+    tf.config.experimental.VirtualDeviceConfiguration()
     tf.config.experimental.set_memory_growth(gpus[0], True)
+    # print('gpus:',gpus)
     K.set_image_data_format('channels_first')
     # setting random seed
     random_seed = 0
@@ -377,25 +427,33 @@ if __name__ == '__main__':
     # ---------------------------------------------------------------------------------------- #
     
     # model_configure & dataset_configure
-    model_name = 'EEGNet'
+    model_name = 'ResCNN_4_STFT_DOA'
     seg_len = '256ms'
     # ds_name = 'ini_hann_np_gcc_phat_128'
     # ds_name = 'drop_denoised_ini_hann_np_gcc_phat_128'
     # ds_name = 'norm_drop_denoised_ini_hann_np_gcc_phat_128'
-    ds_name = 'norm_drop_denoised_norm_ini_hann_np_gcc_phat_128'
-    kernLength = 128
+    # ds_name = 'norm_drop_denoised_norm_ini_hann_np_gcc_phat_128'
+    ds_name = 'norm_drop_denoised_norm_ini_hann_np_STFT_clip_ms_64_overlap_0.5'
+    kernLength = None
+    clip_ms_length = 64
+    overlap_ratio = 0.5
     label_preprocess = None  # None  # 'one_hot'  # 'mean_smooth'  # 'gauss_smooth'
     label_smooth_para = ''
-    epochs = 100
-    md_dir = os.path.join('../model', model_name, seg_len, 'kernLength_' + str(kernLength), ds_name,
-                          str(label_preprocess) + '_' + str(label_smooth_para), 'epoch_' + str(epochs))
-    md_config = MODEL_CONFIG(name=model_name, md_dir=md_dir, batch_size=64, epochs=epochs, dropoutRate=0.25,
-                             earlystop_patience=100, num_filter=32, normalization='sample-wise', kernLength=kernLength,
-                             loss='sparse_categorical_crossentropy')
+    epochs = 20
+    normalization = None
+    num_res_block = 2
+    md_dir = get_model_dirname('../model', model_name, seg_len, kernLength, ds_name, label_preprocess,
+                               label_smooth_para, epochs, clip_ms_length, overlap_ratio, normalization, num_res_block)
+    print('-' * 20, 'Model will be stored in', md_dir)
+    md_config = MODEL_CONFIG(name=model_name, md_dir=md_dir, batch_size=32, epochs=epochs, dropoutRate=0.25,
+                             earlystop_patience=1e10, num_filter=32, num_res_block=num_res_block,
+                             normalization=normalization,
+                             kernLength=kernLength, loss='sparse_categorical_crossentropy')  # TODO Normalization
     ds_config = DATASET_CONFIG(ds_dir=None, ds_path=os.path.join(
         "/home/swang/project/SmartWalker/collect_dataset/dataset/4F_CYC/256ms_0.13_400_16000/", ds_name + '.pkl'),
-                               seg_len=seg_len, sample_rate=16000, ds_preprocess=ds_name, gcc_phat=True,
-                               num_class=8, label_preprocess=label_preprocess,
+                               seg_len=seg_len, sample_rate=16000, ds_preprocess=ds_name, num_class=8,
+                               label_preprocess=label_preprocess, clip_ms_length=clip_ms_length,
+                               overlap_ratio=overlap_ratio, gcc_phat=False,
                                label_smooth_para=label_smooth_para)  # 1s_0.5_800_16000    256ms_0.13_400_16000
     
     folds = 5
@@ -414,26 +472,50 @@ if __name__ == '__main__':
         K.clear_session()
         # load dataset ---- split dataset for train, val & test
         train_idx, val_idx, test_idx = fold_split_idx[fold]
-        print("-----{} for train----{} for val-----{} for test-----".format(train_idx, val_idx, test_idx))
+        print(
+            "----fold: {}----{} for train----{} for val----{} for test----".format(fold, train_idx, val_idx, test_idx))
         x_train, y_train = load_CYC_dataset(train_idx, ds_config.ds_path, shuffle=True, split=None,
                                             normalization=md_config.normalization,
                                             label_preprocess=ds_config.label_preprocess,
                                             label_smooth_para=ds_config.label_smooth_para)
+        # temp_x_train_index = np.random.uniform(size=(len(x_train),))
+        # temp_x_train_index = (temp_x_train_index < 0.8)
+        # x_train = x_train[temp_x_train_index]
+        # y_train = y_train[temp_x_train_index]
+        
         x_val, y_val, = load_CYC_dataset(val_idx, ds_config.ds_path, shuffle=True, split=None,
                                          normalization=md_config.normalization,
                                          label_preprocess=ds_config.label_preprocess,
                                          label_smooth_para=ds_config.label_smooth_para)
+        # temp_x_val_index = np.random.uniform(size=(len(x_val),))
+        # temp_x_val_index = (temp_x_val_index < 0.8)
+        # x_val = x_val[temp_x_val_index]
+        # y_val = y_val[temp_x_val_index]
+        
         x_test, y_test, = load_CYC_dataset(test_idx, ds_config.ds_path, shuffle=True, split=None,
                                            normalization=md_config.normalization,
                                            label_preprocess=ds_config.label_preprocess,
                                            label_smooth_para=ds_config.label_smooth_para)
+        # temp_x_test_index = np.random.uniform(size=(len(x_test),))
+        # temp_x_test_index = (temp_x_test_index < 0.8)
+        # x_test = x_test[temp_x_test_index]
+        # y_test = y_test[temp_x_test_index]
+        
+        x_train = modify_x_4_ResCNN_4_STFT_DOA(x_train)
+        x_val = modify_x_4_ResCNN_4_STFT_DOA(x_val)
+        x_test = modify_x_4_ResCNN_4_STFT_DOA(x_test)
         utils.statistic_label_proportion(y_train, y_val, y_test, do_print=True)
         
         # build model
-        model = build_model(model_name=md_config.name, num_classes=ds_config.num_class, Chans=ds_config.num_channel,
-                            Samples=ds_config.num_samplepoint, dropoutRate=md_config.dropoutRate,
-                            kernLength=md_config.kernLength)
+        model = get_model(model_config=md_config, dataset_config=ds_config)
+        model.build(input_shape=x_train.shape)
         model.summary()
+        
+        # model.build(input_shape=(None, 8, 7, 508))
+        # rand_input = np.random.random((3, 8, 7, 508))
+        # model.predict(rand_input)
+        # model.save(ckpt_dir)
+        # exit(0)
         history = train_model([x_train, y_train], [x_val, y_val], test_dataset=None, model=model,
                               model_path=ckpt_dir, batch_size=md_config.batch_size, epochs=md_config.epochs,
                               patience=md_config.earlystop_patience, loss=md_config.loss)
@@ -443,9 +525,9 @@ if __name__ == '__main__':
         print('train_loss: ', train_loss)
         print('val_acc: ', val_acc)
         print('val_loss: ', val_loss)
-        # calculate the final result
-        # ckpt_dir='/home/swang/project/SmartWalker/SSL/model/model/EEGNet/ckpt'
-        model = keras.models.load_model(ckpt_dir)
+        
+        # Evaluate model
+        # model = keras.models.load_model(ckpt_dir)
         # _, f_train_acc = model.evaluate(x_train, y_train)
         # _, f_val_acc = model.evaluate(x_val, y_val)
         # _, f_test_acc = model.evaluate(x_test, y_test)
@@ -466,13 +548,16 @@ if __name__ == '__main__':
         print('-' * 20, f_train_acc3, f_val_acc3, f_test_acc3, '-' * 20, )
         
         # plot the curve of results
+        model_name = 'ResCNN_' + str(
+            md_config.num_res_block) if md_config.name == 'ResCNN_4_STFT_DOA' else md_config.name
         title = 'Acc & Loss of {} Training ({:.1f}%) & Val ({:.1f}%) & Test ({:.1f}%)'.format(
-            md_config.name, f_train_acc * 100, f_val_acc * 100, f_test_acc * 100)
+            model_name, f_train_acc * 100, f_val_acc * 100, f_test_acc * 100)
         curve_name = ['Training acc', 'Training loss', 'Val acc', 'Val loss', ]
         curve_data = [train_acc, train_loss, val_acc, val_loss, ]
         color = ['r', 'g', 'b', 'cyan']
         img_path = img_path
-        utils.plot_curve(data=list(zip(curve_name, curve_data, color)), title=title, y_lim=(0, 1), img_path=img_path)
+        utils.plot_curve(data=list(zip(curve_name, curve_data, color)), title=title, y_lim=(0, 1), img_path=img_path,
+                         show=False)
         
         # train_acc, val_acc, test_acc = history['train_acc'], history['val_acc'], history['test_acc']
         
@@ -485,10 +570,14 @@ if __name__ == '__main__':
         # color = ['r', 'g', 'b', ]
         # utils.plot_curve(data=list(zip(curve_name, curve_data, color)), title=title, y_lim=(0, 1))
         K.clear_session()
+        del x_train, y_train, x_val, y_val, x_test, y_test,
+    res_path = os.path.join(md_config.md_dir, 'res.npz')
+    np.savez(res_path, train_accs=train_accs, val_accs=val_accs, test_accs=test_accs,
+             train_acc3s=train_acc3s, val_acc3s=val_acc3s, test_acc3s=test_acc3s)
     print('train_accs: ', [round(i, 3) for i in train_accs], '-' * 5, round(np.mean(train_accs), 3))
     print('val_accs: ', [round(i, 3) for i in val_accs], '-' * 5, round(np.mean(val_accs), 3))
     print('test_accs: ', [round(i, 3) for i in test_accs], '-' * 5, round(np.mean(test_accs), 3))
     print('train_accs: ', [round(i, 3) for i in train_acc3s], '-' * 5, round(np.mean(train_acc3s), 3))
     print('val_accs: ', [round(i, 3) for i in val_acc3s], '-' * 5, round(np.mean(val_acc3s), 3))
     print('test_accs: ', [round(i, 3) for i in test_acc3s], '-' * 5, round(np.mean(test_acc3s), 3))
-    print(md_config.kernLength, ds_config.ds_preprocess, ds_config.label_preprocess, ds_config.label_smooth_para)
+    print('md_dir:', md_dir)
