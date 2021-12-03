@@ -106,7 +106,7 @@ def create_multi_bars(data, color=None, title=None, x_labels=None, y_label=None,
         plt.show()
 
 
-if __name__ == "__main__":
+def plot_num_res_block_vs_fold():
     train_accs, val_accs, test_accs, train_acc3s, val_acc3s, test_acc3s = [], [], [], [], [], []
     
     for fold in range(6):
@@ -125,14 +125,64 @@ if __name__ == "__main__":
     train_accs = np.concatenate((train_accs, np.mean(train_accs, axis=1).reshape((-1, 1))), axis=1)
     val_accs = np.concatenate((val_accs, np.mean(val_accs, axis=1).reshape((-1, 1))), axis=1)
     test_accs = np.concatenate((test_accs, np.mean(test_accs, axis=1).reshape((-1, 1))), axis=1)
-
-    # print('train_accs: ', [round(i, 3) for i in train_accs], '-' * 5, round(np.mean(train_accs), 3))
-    # print('val_accs: ', [round(i, 3) for i in val_accs], '-' * 5, round(np.mean(val_accs), 3))
-    # print('test_accs: ', [round(i, 3) for i in test_accs], '-' * 5, round(np.mean(test_accs), 3))
-    # print('train_accs: ', [round(i, 3) for i in train_acc3s], '-' * 5, round(np.mean(train_acc3s), 3))
-    # print('val_accs: ', [round(i, 3) for i in val_acc3s], '-' * 5, round(np.mean(val_acc3s), 3))
-    # print('test_accs: ', [round(i, 3) for i in test_acc3s], '-' * 5, round(np.mean(test_acc3s), 3))
     
     x_labels = ['Fold_1', 'Fold_2', 'Fold_3', 'Fold_4', 'Fold_5', 'Mean', ]
     create_multi_bars(train_accs, title='Fold-wise Train Acc of ResConv_i with Whole Norm', x_labels=x_labels,
                       y_label='acc', y_lim=(0, 1), tick_step=1, group_gap=0.2, bar_gap=0.05, save_path=None)
+
+
+def print_result():
+    res_path = '/home/swang/project/SmartWalker/SSL/model/ResCNN_3_256ms_norm_drop_denoised_norm_ini_hann_np_STFT_clip_ms_64_overlap_0.5_epoch_20/_num_filter_128_norm_None_label_None/res.npz'
+    res = np.load(res_path)
+    train_accs = res['train_accs']
+    val_accs = res['val_accs']
+    test_accs = res['test_accs']
+    train_acc3s = res['train_acc3s']
+    val_acc3s = res['val_acc3s']
+    test_acc3s = res['test_acc3s']
+    
+    print('train_accs: ', [round(i, 3) for i in train_accs], '-' * 5, round(np.mean(train_accs), 3))
+    print('val_accs: ', [round(i, 3) for i in val_accs], '-' * 5, round(np.mean(val_accs), 3))
+    print('test_accs: ', [round(i, 3) for i in test_accs], '-' * 5, round(np.mean(test_accs), 3))
+    print('train_accs: ', [round(i, 3) for i in train_acc3s], '-' * 5, round(np.mean(train_acc3s), 3))
+    print('val_accs: ', [round(i, 3) for i in val_acc3s], '-' * 5, round(np.mean(val_acc3s), 3))
+    print('test_accs: ', [round(i, 3) for i in test_acc3s], '-' * 5, round(np.mean(test_acc3s), 3))
+
+
+def plot_2d():
+    plt.hist2d(x, y, bins=30, cmap='Blues')
+    cb = plt.colorbar()
+    cb.set_label('counts in bin')
+
+def plot_num_res_block_vs_num_filter():
+    num_filter_ls = [8, 16, 32, 64, 128]
+    num_res_block_ls = [1, 2, 3]
+    
+    accs = []
+    for res_idx in num_res_block_ls:
+        temp_accs = []
+        for filter_idx in num_filter_ls:
+            res_path = '/home/swang/project/SmartWalker/SSL/model/ResCNN_' + str(
+                res_idx) + '_256ms_norm_drop_denoised_norm_ini_hann_np_STFT_clip_ms_64_overlap_0.5_epoch_20/_num_filter_' + str(
+                filter_idx) + '_norm_None_label_None/res.npz'
+            res = np.load(res_path)
+            # train_accs = res['train_accs']
+            # val_accs = res['val_accs']
+            test_accs = res['test_accs']
+            # train_acc3s = res['train_acc3s']
+            # val_acc3s = res['val_acc3s']
+            # test_acc3s = res['test_acc3s']
+            temp_accs.append(np.mean(test_accs))
+        accs.append(temp_accs)
+    accs = np.asarray(accs)
+    
+    print(accs)
+
+
+if __name__ == "__main__":
+    
+    # print_result()
+    plot_num_res_block_vs_num_filter()
+
+
+

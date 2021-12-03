@@ -204,7 +204,8 @@ def get_model(model_config, dataset_config):
                                 dropoutRate=dropoutRate)
     elif model_name == 'ResCNN_4_STFT_DOA':
         num_res_block = model_config.num_res_block
-        return models_tf.ResCNN_4_STFT_DOA(num_classes=num_classes, num_res_block=num_res_block)
+        num_filter = model_config.num_filter
+        return models_tf.ResCNN_4_STFT_DOA(num_classes=num_classes, num_res_block=num_res_block, num_filter=num_filter)
     else:
         raise Exception('No such model:{}'.format(model_name))
 
@@ -272,21 +273,123 @@ def train_model(train_dataset, val_dataset, test_dataset, model, model_path="./m
     }
 
 
+def train_model_with_streaming_data(model, adv_model_name, at_model_path, train_dataset, val_dataset, test_dataset, batchsize=32,
+                         epochs=1, target_id=0, lr=1e-3, epsilon=0.1, patience=200):
+    # Set AT model
+    at_ckpt_path = os.path.join(at_model_path, 'ckpt')
+    if not os.path.exists(at_ckpt_path):
+        os.makedirs(at_ckpt_path)
+    
+    # at_result_path = os.path.join(at_t_model_path, 'result.npz')
+    # at_img_path = os.path.join(at_t_model_path, 'at_acc_loss_.jpg')
+    
+    # Load the dataset
+    # x_train, y_train = train_dataset
+    # x_val, y_val = val_dataset
+    # x_test, y_test = test_dataset
+    
+    # set up AT model
+    best_epoch = 0
+    patience_count = 0
+    results = []
+    train_acc, _, _ = eva_model(model, train_dataset)
+    val_acc, _, _ = eva_model(model, val_dataset)
+    test_acc, _, _ = eva_model(model, test_dataset)
+    train_adv_acc, train_y_pred, _ = eva_adv_model(model, train_dataset, adv_model_name, target_id, epsilon,
+                                                   iter_nb=10)
+    val_adv_acc, val_y_pred, _ = eva_adv_model(model, val_dataset, adv_model_name, target_id, epsilon, iter_nb=10)
+    test_adv_acc, test_y_pred, _ = eva_adv_model(model, test_dataset, adv_model_name, target_id, epsilon,
+                                                 iter_nb=10)
+    train_target_prob = calculate_target_prob(train_y_pred, target_id)
+    val_target_prob = calculate_target_prob(val_y_pred, target_id)
+    test_target_prob = calculate_target_prob(test_y_pred, target_id)
+    print('-' * 20, train_acc, val_acc, test_acc, '-' * 20)
+    results.append(
+        [train_acc, val_acc, test_acc, train_adv_acc, val_adv_acc, test_adv_acc, train_target_prob, val_target_prob,
+         test_target_prob])
+    
+    # Start to adversarially train the model
+    print('-' * 20, "Start to adversarially train the model", '-' * 20)
+    for epoch_id in range(epochs):  # train loop
+        optimizer = tf.train.AdamOptimizer(learning_rate=lr)  # ExponentialDecay_lr(lr, epoch_id, decay_rate=0.99)
+        batches = list(utils.batch_iter(train_dataset, batchsize=batchsize, shuffle=True, random_seed=None))
+        with tqdm(batches, desc="Epoch %d / %d: " % (epoch_id + 1, epochs), total=len(batches),
+                  unit='batch') as iterator:
+            for train_iter, (x, y) in enumerate(iterator):
+                x = tf.cast(x, tf.float32)  # +noise?
+                # x = add_noise(x, epsilon=epsilon)
+                
+                # generate adversarial samples
+                x_adv = generate_adv_sample(x, model, adv_model_name, target_id, epsilon)
+                # concatenence the samples
+                x_batch = np.concatenate([x, x_adv], axis=0)
+                y_batch = np.concatenate([y, y], axis=0)
+                
+                # retrain the model
+                with tf.GradientTape() as tape:
+                    y_pred = model(x_batch, training=True)
+                    loss = tf.keras.losses.sparse_categorical_crossentropy(y_batch, y_pred)
+                
+                grads = tape.gradient(loss, model.trainable_weights)
+                optimizer.apply_gradients(zip(grads, model.trainable_weights))
+        # evaluate AT
+        train_acc, _, _ = eva_model(model, train_dataset)
+        val_acc, _, _ = eva_model(model, val_dataset)
+        test_acc, _, _ = eva_model(model, test_dataset)
+        train_adv_acc, train_y_pred, _ = eva_adv_model(model, train_dataset, adv_model_name, target_id, epsilon,
+                                                       iter_nb=10)
+        val_adv_acc, val_y_pred, _ = eva_adv_model(model, val_dataset, adv_model_name, target_id, epsilon, iter_nb=10)
+        test_adv_acc, test_y_pred, _ = eva_adv_model(model, test_dataset, adv_model_name, target_id, epsilon,
+                                                     iter_nb=10)
+        train_target_prob = calculate_target_prob(train_y_pred, target_id)
+        val_target_prob = calculate_target_prob(val_y_pred, target_id)
+        test_target_prob = calculate_target_prob(test_y_pred, target_id)
+        print('-' * 20, train_acc, val_acc, test_acc, '-' * 20)
+        results.append(
+            [train_acc, val_acc, test_acc, train_adv_acc, val_adv_acc, test_adv_acc, train_target_prob, val_target_prob,
+             test_target_prob])
+        
+        if epoch_id == 0:
+            print("Saving weights in the first epoch with best_acc as %0.5f!" % (val_acc))
+            model.save(at_ckpt_path)
+            best_epoch = epoch_id + 1
+            patience_count = 0
+        elif val_acc > results[best_epoch][1]:
+            print("Saving weights as best_acc improved from %0.5f to %0.5f!" % (results[best_epoch][1], val_acc))
+            model.save(at_ckpt_path)
+            best_epoch = epoch_id + 1
+            patience_count = 0
+        elif patience_count > patience:
+            break
+        else:
+            patience_count += 1
+        print('-' * 50, '\n',
+              'train_acc \t val_acc \t test_acc \t train_adv_acc \t val_adv_acc \t test_adv_acc \t train_target_prob \t val_target_prob \t test_target_prob:\n',
+              'The current results:\n',
+              '{}\n'.format(results[-1]),
+              'The corresponding results when the val_acc is optimal\n',
+              '{}\n'.format(results[best_epoch]), '-' * 50)
+    
+    K.clear_session()
+    
+    return results, best_epoch
+
+
 def eva_model(model, dataset):
     '''
-    cal_acc
-    input:
-    model_name,model, model_path,data_name,x_test,y_test
+    
+    Args:
+        model: 
+        dataset:
 
-    output:
-    acc
-    y_pred
+    Returns:
+
     '''
-    x_test, y_test = dataset
-    y_pred_prob = model.predict(x_test)
+    x, y = dataset
+    y_pred_prob = model.predict(x)
     y_pred = np.argmax(y_pred_prob, axis=-1)
-    y_test = np.squeeze(y_test)
-    acc = np.sum(y_pred == y_test) / len(y_pred)
+    y = np.squeeze(y)
+    acc = np.sum(y_pred == y) / len(y_pred)
     
     return acc, y_pred, y_pred_prob
 
@@ -348,7 +451,7 @@ class DATASET_CONFIG:
 class MODEL_CONFIG:
     def __init__(self, md_dir='./model', name='EEGNet', batch_size=32, epochs=1000, dropoutRate=0.25,
                  earlystop_patience=None, num_filter=32, normalization=None, kernLength=None,
-                 loss=None, num_res_block=None):
+                 loss=None, num_res_block=None, ):
         self.name = name
         self.batch_size = batch_size
         self.epochs = epochs
@@ -382,19 +485,21 @@ def calculate_acc_and_acc3(x, y, model):
     return acc, acc_3
 
 
-def get_model_dirname(model_dir, model_name, seg_len, kernLength, ds_name, label_preprocess, label_smooth_para, epochs,
-                      clip_ms_length, overlap_ratio, normalization, num_res_block):
+def get_model_dirname(model_dir=None, model_name=None, seg_len=None, kernLength=None, ds_name=None,
+                      label_preprocess=None, label_smooth_para=None, epochs=None, clip_ms_length=None,
+                      overlap_ratio=None, normalization=None, num_res_block=None, num_filter=None):
     model_name = 'ResCNN' if model_name == 'ResCNN_4_STFT_DOA' else model_name
     num_res_block = '_' + str(num_res_block) if num_res_block is not None else ''
     ds_name = '_' + ds_name
     seg_len = '_' + str(seg_len) if (seg_len is not None) else ''
     kernLength = '_kernLength_' + str(int(kernLength)) if (kernLength is not None) else ''
+    num_filter = '_num_filter_' + str(int(num_filter)) if (num_filter is not None) else ''
     clip_ms_length = '_clip_ms_' + str(int(clip_ms_length)) if (clip_ms_length is not None) else ''
     overlap_ratio = '_overlap_' + str(round(overlap_ratio, 2)) if (overlap_ratio is not None) else ''
     normalization = '_norm_' + str(normalization)
     label_preprocess = '_label_' + str(label_preprocess) + str(label_smooth_para)
     return os.path.join(model_dir, model_name + num_res_block + seg_len + ds_name + '_epoch_' + str(epochs),
-                        kernLength + normalization + label_preprocess)
+                        kernLength + num_filter + normalization + label_preprocess)
 
 
 def modify_x_4_ResCNN_4_STFT_DOA(x):
@@ -405,7 +510,12 @@ def modify_x_4_ResCNN_4_STFT_DOA(x):
 
 
 if __name__ == '__main__':
-    # num_res_block = int(sys.argv[1])
+    print('Hello, world!')
+    # exit(0)
+    num_res_block = int(sys.argv[1])
+    num_filter = int(sys.argv[2])
+    print('num_res_block:', num_res_block, 'num_filter:', num_filter, )
+    
     # temp_norm = str(sys.argv[2])
     # normalization = temp_norm if temp_norm != 'None' else None
     # print('num_res_block:', num_res_block, 'normalization:', normalization, )
@@ -441,14 +551,17 @@ if __name__ == '__main__':
     label_smooth_para = ''
     epochs = 20
     normalization = None
-    num_res_block = 2
-    md_dir = get_model_dirname('../model', model_name, seg_len, kernLength, ds_name, label_preprocess,
-                               label_smooth_para, epochs, clip_ms_length, overlap_ratio, normalization, num_res_block)
+    # num_res_block = 2
+    # num_filter =128
+    md_dir = get_model_dirname(model_dir='../model', model_name=model_name, seg_len=seg_len, kernLength=kernLength,
+                               ds_name=ds_name, label_preprocess=label_preprocess, num_filter=num_filter,
+                               label_smooth_para=label_smooth_para, epochs=epochs, clip_ms_length=clip_ms_length,
+                               overlap_ratio=overlap_ratio, normalization=normalization, num_res_block=num_res_block)
     print('-' * 20, 'Model will be stored in', md_dir)
     md_config = MODEL_CONFIG(name=model_name, md_dir=md_dir, batch_size=32, epochs=epochs, dropoutRate=0.25,
-                             earlystop_patience=1e10, num_filter=32, num_res_block=num_res_block,
-                             normalization=normalization,
-                             kernLength=kernLength, loss='sparse_categorical_crossentropy')  # TODO Normalization
+                             earlystop_patience=1e10, num_filter=num_filter, num_res_block=num_res_block,
+                             normalization=normalization, kernLength=kernLength,
+                             loss='sparse_categorical_crossentropy')  # TODO Normalization
     ds_config = DATASET_CONFIG(ds_dir=None, ds_path=os.path.join(
         "/home/swang/project/SmartWalker/collect_dataset/dataset/4F_CYC/256ms_0.13_400_16000/", ds_name + '.pkl'),
                                seg_len=seg_len, sample_rate=16000, ds_preprocess=ds_name, num_class=8,
