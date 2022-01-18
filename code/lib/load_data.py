@@ -2,7 +2,7 @@ import scipy.io as scio
 import h5py
 import numpy as np
 import time
-from .utils import standard_normalize, standard_normalize_wise, shuffle_data, split_data
+from .utils import standard_normalizaion, standard_normalization_wise, shuffle_data, split_data
 from scipy.signal import resample
 import pickle
 
@@ -59,7 +59,7 @@ def load_hole_dataset(sbj_idx, ds_path, shuffle=True, normalization=None, split=
         y = one_hot_encoder(y)
     if normalization is not None:
         for i in range(len(x)):
-            x[i] = standard_normalize_wise(x[i], normalization)
+            x[i] = standard_normalization_wise(x[i], normalization)
     if shuffle:
         x, y = shuffle_data([x, y])
     if split is not None:
@@ -95,7 +95,7 @@ def load_CYC_dataset(sbj_idx, ds_path, shuffle=True, normalization=None, split=N
     
     if normalization is not None:
         for i in range(len(x)):
-            x[i] = standard_normalize_wise(x[i], normalization)
+            x[i] = standard_normalization_wise(x[i], normalization)
     if shuffle:
         x, y = shuffle_data([x, y])
     if split is not None:

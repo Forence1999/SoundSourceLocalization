@@ -16,7 +16,7 @@ from lib.mi_data import load_hole_dataset, one_hot_encoder
 import shutil
 from collections import Counter
 from tensorflow.python.platform import tf_logging as logging
-from calculate_doa import *
+from train_4_doa import *
 
 if __name__ == '__main__':
     

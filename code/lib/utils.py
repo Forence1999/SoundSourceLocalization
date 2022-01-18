@@ -9,27 +9,62 @@ import random
 from collections import Counter
 
 
-def standard_normalize(x):
+def set_random_seed(seed=0, fix_np=False, fix_tf=False, fix_torch=False, ):
+    ''' setting random seed '''
+    os.environ["PYTHONHASHSEED"] = str(seed)
+    random.seed(seed)
+    if fix_np:
+        np.random.seed(seed)
+    if fix_tf:
+        import tensorflow as tf
+        tf.random.set_seed(seed)
+    if fix_torch:
+        import torch
+        import torch.backends.cudnn as cudnn
+        
+        torch.manual_seed(seed)
+        cudnn.deterministic = True
+        print('Warning:', 'You have chosen to seed training. '
+                          'This will turn on the CUDNN deterministic setting, '
+                          'which can slow down your training considerably! '
+                          'You may see unexpected behavior when restarting '
+                          'from checkpoints.')
+
+
+def add_prefix_and_suffix_4_basename(path, prefix=None, suffix=None):
+    '''
+    add prefix and/or suffix string(s) to a path's basename
+    :param path:
+    :param prefix:
+    :param suffix:
+    :return:
+    '''
+    dir_path, basename = os.path.split(path)
+    filename, ext = os.path.splitext(basename)
+    filename = str(prefix if prefix is not None else '') + filename + str(suffix if suffix is not None else '') + ext
+    
+    return os.path.join(dir_path, filename)
+
+
+def standard_normalizaion(x):
     return (x - np.mean(x)) / np.std(x)
 
 
-def standard_normalize_wise(data, normalization=None):
-    '''
-    channel-first
-    '''
+def standard_normalization_wise(data, normalization=None):
+    ''' channel-first '''
     data = np.array(data)
     if normalization is None:
         return data
     assert normalization in ['whole', 'sample-wise', 'channel-wise', 'samplepoint-wise']
     for i in range(len(data)):
         if normalization == 'whole':
-            data = standard_normalize(data)
+            data = standard_normalizaion(data)
         elif normalization == 'sample-wise':
-            data[i, :, :] = standard_normalize(data[i, :, :])
+            data[i, :, :] = standard_normalizaion(data[i, :, :])
         elif normalization == 'channel-wise':
-            data[i, :, :] = [standard_normalize(data[i, j, :]) for j in range(data.shape[-2])]
+            data[i, :, :] = [standard_normalizaion(data[i, j, :]) for j in range(data.shape[-2])]
         elif normalization == 'samplepoint-wise':
-            data[i, :, :] = np.array([standard_normalize(data[i, :, j]) for j in range(data.shape[-1])]).T
+            data[i, :, :] = np.array([standard_normalizaion(data[i, :, j]) for j in range(data.shape[-1])]).T
         else:
             print('-' * 20, 'normalization is incorrectly assigned', '-' * 20)
     
@@ -323,7 +358,7 @@ def extract_nb_from_str(str):
     return list(map(int, res))
 
 
-def get_files_by_suffix(root, suffix):
+def get_files_by_suffix(root, suffix=''):
     if isinstance(suffix, str):
         suffix = (suffix,)
     else:
@@ -338,7 +373,7 @@ def get_files_by_suffix(root, suffix):
     return file_list
 
 
-def get_files_by_prefix(root, prefix):
+def get_files_by_prefix(root, prefix=''):
     if isinstance(prefix, str):
         prefix = (prefix,)
     else:
@@ -353,7 +388,7 @@ def get_files_by_prefix(root, prefix):
     return file_list
 
 
-def get_dirs_by_suffix(root, suffix):
+def get_dirs_by_suffix(root, suffix=''):
     if isinstance(suffix, str):
         suffix = (suffix,)
     else:
@@ -368,7 +403,7 @@ def get_dirs_by_suffix(root, suffix):
     return dir_list
 
 
-def get_dirs_by_prefix(root, prefix):
+def get_dirs_by_prefix(root, prefix=''):
     if isinstance(prefix, str):
         prefix = (prefix,)
     else:
@@ -380,6 +415,67 @@ def get_dirs_by_prefix(root, prefix):
             if d.startswith(prefix):
                 path = os.path.normpath(os.path.join(parent, d))
                 dir_list.append(path)
+    return dir_list
+
+
+def get_subfiles_by_suffix(root, suffix=''):
+    if isinstance(suffix, str):
+        suffix = (suffix,)
+    else:
+        suffix = tuple(suffix)
+    
+    file_list = []
+    for file_basename in os.listdir(root):
+        fpath = os.path.join(root, file_basename)
+        if os.path.isfile(fpath) and file_basename.endswith(suffix):
+            # img: (('.jpg', '.bmp', '.dib', '.png', '.jpg', '.jpeg', '.pbm', '.pgm', '.ppm', '.tif', '.tiff')):
+            path = os.path.normpath(fpath)
+            file_list.append(path)
+    return file_list
+
+
+def get_subfiles_by_prefix(root, prefix=''):
+    if isinstance(prefix, str):
+        prefix = (prefix,)
+    else:
+        prefix = tuple(prefix)
+    
+    file_list = []
+    for file_basename in os.listdir(root):
+        fpath = os.path.join(root, file_basename)
+        if os.path.isfile(fpath) and file_basename.startswith(prefix):
+            path = os.path.normpath(fpath)
+            file_list.append(path)
+    return file_list
+
+
+def get_subdirs_by_suffix(root, suffix=''):
+    if isinstance(suffix, str):
+        suffix = (suffix,)
+    else:
+        suffix = tuple(suffix)
+    
+    dir_list = []
+    for dir_basename in os.listdir(root):
+        dpath = os.path.join(root, dir_basename)
+        if os.path.isdir(dpath) and dir_basename.endswith(suffix):
+            path = os.path.normpath(dpath)
+            dir_list.append(path)
+    return dir_list
+
+
+def get_subdirs_by_prefix(root, prefix=''):
+    if isinstance(prefix, str):
+        prefix = (prefix,)
+    else:
+        prefix = tuple(prefix)
+    
+    dir_list = []
+    for dir_basename in os.listdir(root):
+        dpath = os.path.join(root, dir_basename)
+        if os.path.isdir(dpath) and dir_basename.startswith(prefix):
+            path = os.path.normpath(dpath)
+            dir_list.append(path)
     return dir_list
 
 
@@ -435,10 +531,11 @@ def plot_hist(data, title=None, img_path=None, bins=100, show=True):
     else:
         plt.close()
 
+
 def plot_multi_bars(data, color=None, title=None, x_labels=None, y_label=None, y_lim=None, tick_step=1.,
-                      group_gap=0.2,
-                      bar_gap=0., plt_show=True, value_show=True, dpi=300, value_fontsize=5, value_interval=0.01,
-                      value_format='%.2f', save_path=None):
+                    group_gap=0.2,
+                    bar_gap=0., plt_show=True, value_show=True, dpi=300, value_fontsize=5, value_interval=0.01,
+                    value_format='%.2f', save_path=None):
     '''
     x_labels: x轴坐标标签序列
     data: 二维列表，每一行为同一颜色的各个bar值，每一列为同一个横坐标的各个bar值

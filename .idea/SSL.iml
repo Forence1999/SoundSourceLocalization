@@ -6,8 +6,9 @@
       <excludeFolder url="file://$MODULE_DIR$/Gsound" />
       <excludeFolder url="file://$MODULE_DIR$/papers_xiaoyang" />
       <excludeFolder url="file://$MODULE_DIR$/RL_backup" />
+      <excludeFolder url="file://$MODULE_DIR$/paper" />
     </content>
-    <orderEntry type="jdk" jdkName="Remote Python 3.7.11 (sftp://swang@127.0.0.1:6000/home/swang/anaconda3/envs/smartwalker/bin/python)" jdkType="Python SDK" />
+    <orderEntry type="jdk" jdkName="Remote Python 3.7.11 (sftp://swang@127.0.0.1:6014/home/swang/anaconda3/envs/smartwalker/bin/python)" jdkType="Python SDK" />
     <orderEntry type="sourceFolder" forTests="false" />
   </component>
   <component name="PackageRequirementsSettings">
